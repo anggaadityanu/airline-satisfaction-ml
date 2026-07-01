@@ -341,7 +341,10 @@ pip freeze > requirements.txt
 
 # 👨‍💻 Author
 
-**Angga Aditya**
+- **Angga Aditya**
+- **Zefhana Ananda**
+- **Fadhil Afiq Badruzzaman**
+- **Rizki Bagas Wicaksono**
 
 Universitas Esa Unggul
 

@@ -1,575 +1,197 @@
-# ==========================================================
-# IMPORT LIBRARY
-# ==========================================================
-
 import streamlit as st
 import pandas as pd
 import joblib
+import plotly.graph_objects as go
+from pathlib import Path
 
-# ==========================================================
-# KONFIGURASI HALAMAN
-# ==========================================================
+st.set_page_config(page_title="Prediksi Kepuasan Penumpang", page_icon="✈️", layout="wide")
 
-st.set_page_config(
-    page_title="Airline Passenger Satisfaction Prediction",
-    page_icon="✈️",
-    layout="wide"
-)
+# tema
+if "theme" not in st.session_state:
+    st.session_state.theme = "dark"
 
-# ==========================================================
-# LOAD MODEL
-# ==========================================================
+def toggle_theme():
+    st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
 
-logistic_model = joblib.load("../model/logistic_regression.pkl")
-decision_tree_model = joblib.load("../model/decision_tree.pkl")
-random_forest_model = joblib.load("../model/random_forest.pkl")
-xgboost_model = joblib.load("../model/xgboost.pkl")
+if st.session_state.theme == "light":
+    st.markdown("""
+    <style>
+    .main { background: #ffffff; }
+    h1, h2, h3, p, span, label, div { color: #1a1a1a !important; }
+    .stDataFrame { color: #1a1a1a; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# ==========================================================
-# LOAD ENCODER & SCALER
-# ==========================================================
+# load model
+BASE_DIR = Path(__file__).resolve().parent.parent / "model"
+lr_model = joblib.load(BASE_DIR / "logistic_regression.pkl")
+dt_model = joblib.load(BASE_DIR / "decision_tree.pkl")
+rf_model = joblib.load(BASE_DIR / "random_forest.pkl")
+xgb_model = joblib.load(BASE_DIR / "xgboost.pkl")
+encoders = joblib.load(BASE_DIR / "label_encoders.pkl")
+scaler = joblib.load(BASE_DIR / "standard_scaler.pkl")
 
-encoders = joblib.load("../model/label_encoders.pkl")
-scaler = joblib.load("../model/standard_scaler.pkl")
-
-# ==========================================================
-# CSS
-# ==========================================================
-
-st.markdown("""
-<style>
-
-.main{
-    background-color:#F4F7FB;
-}
-
-.block-container{
-    padding-top:2rem;
-    padding-bottom:2rem;
-}
-
-h1{
-    color:#0F4C81;
-    text-align:center;
-    font-weight:bold;
-}
-
-h2,h3{
-    color:#2C3E50;
-}
-
-[data-testid="stMetric"]{
-
-    background:white;
-
-    border-radius:15px;
-
-    padding:18px;
-
-    box-shadow:0px 3px 12px rgba(0,0,0,.12);
-
-    border-left:6px solid #2E86DE;
-
-}
-
-div[data-testid="stDataFrame"]{
-
-    background:white;
-
-    border-radius:15px;
-
-    padding:10px;
-
-    box-shadow:0px 3px 12px rgba(0,0,0,.10);
-
-}
-
-.stButton>button{
-
-    width:100%;
-
-    height:55px;
-
-    background:#2E86DE;
-
-    color:white;
-
-    border-radius:10px;
-
-    font-size:18px;
-
-    font-weight:bold;
-
-    border:none;
-
-}
-
-.stButton>button:hover{
-
-    background:#1B4F72;
-
-    color:white;
-
-}
-
-</style>
-""",unsafe_allow_html=True)
-
-# ==========================================================
-# FUNGSI MENGUBAH HASIL PREDIKSI
-# ==========================================================
-
-def prediction_label(value):
-    return "😊 Satisfied" if value == 1 else "😞 Dissatisfied"
-
-
-# ==========================================================
-# HEADER
-# ==========================================================
-
-st.markdown("""
-# ✈ Airline Passenger Satisfaction Prediction
-
-### Machine Learning Dashboard
-
-Prediksi kepuasan penumpang menggunakan **4 algoritma Machine Learning**
-""")
+top_left, top_right = st.columns([6, 1])
+with top_left:
+    st.title("✈️ Prediksi Kepuasan Penumpang Maskapai")
+    st.caption("Masukkan data penumpang untuk memprediksi apakah penumpang merasa puas atau tidak.")
+with top_right:
+    mode_label = "☀️ Light" if st.session_state.theme == "dark" else "🌙 Dark"
+    st.button(mode_label, on_click=toggle_theme)
 
 st.divider()
 
-col1,col2,col3,col4 = st.columns(4)
+col_input, col_result = st.columns([1.4, 1], gap="large")
 
-col1.metric("Dataset","129.880")
+with col_input:
 
-col2.metric("Feature","21")
+    st.subheader("Data Penumpang")
 
-col3.metric("Model","4")
+    r1c1, r1c2 = st.columns(2)
+    customer_type = r1c1.selectbox("Tipe Pelanggan", ["Loyal Customer", "Disloyal Customer"])
+    travel_type = r1c2.selectbox("Tujuan Perjalanan", ["Business travel", "Personal Travel"])
 
-col4.metric("Best Accuracy","95.80%")
+    r2c1, r2c2, r2c3 = st.columns(3)
+    travel_class = r2c1.selectbox("Kelas", ["Business", "Eco", "Eco Plus"])
+    age = r2c2.number_input("Umur", 7, 85, 35)
+    flight_distance = r2c3.number_input("Jarak (mil)", 50, 7000, 1500)
 
-st.divider()
+    r3c1, r3c2 = st.columns(2)
+    departure_delay = r3c1.number_input("Delay Berangkat (menit)", 0, 2000, 0)
+    arrival_delay = r3c2.number_input("Delay Tiba (menit)", 0, 2000, 0)
 
+    st.divider()
+    st.subheader("Rating Layanan (0-5)")
 
-# ==========================================================
-# LAYOUT
-# ==========================================================
+    r4c1, r4c2, r4c3 = st.columns(3)
+    seat_comfort = r4c1.slider("Seat Comfort", 0, 5, 3)
+    food_drink = r4c2.slider("Food & Drink", 0, 5, 3)
+    inflight_wifi = r4c3.slider("Inflight Wifi", 0, 5, 3)
 
-left,right = st.columns([1.3,1])
+    r5c1, r5c2, r5c3 = st.columns(3)
+    inflight_entertainment = r5c1.slider("Entertainment", 0, 5, 3)
+    onboard_service = r5c2.slider("On-board Service", 0, 5, 3)
+    leg_room = r5c3.slider("Leg Room", 0, 5, 3)
 
+    r6c1, r6c2, r6c3 = st.columns(3)
+    online_booking = r6c1.slider("Online Booking", 0, 5, 3)
+    online_boarding = r6c2.slider("Online Boarding", 0, 5, 3)
+    online_support = r6c3.slider("Online Support", 0, 5, 3)
 
-# ==========================================================
-# INPUT DATA PENUMPANG
-# ==========================================================
+    r7c1, r7c2, r7c3 = st.columns(3)
+    baggage = r7c1.slider("Baggage Handling", 1, 5, 3)
+    checkin = r7c2.slider("Check-in Service", 0, 5, 3)
+    cleanliness = r7c3.slider("Cleanliness", 0, 5, 3)
 
-with left:
+    r8c1, r8c2 = st.columns(2)
+    gate_location = r8c1.slider("Gate Location", 0, 5, 3)
+    departure_arrival = r8c2.slider("Dep/Arr Time Convenient", 0, 5, 3)
 
-    st.subheader("📝 Input Data Penumpang")
+    st.markdown("")
+    predict = st.button("Prediksi", type="primary")
 
-    col1,col2 = st.columns(2)
 
-    with col1:
-
-        customer_type = st.selectbox(
-            "Customer Type",
-            ["Loyal Customer","Disloyal Customer"]
-        )
-
-        age = st.number_input(
-            "Age",
-            7,
-            85,
-            35
-        )
-
-        travel_type = st.selectbox(
-            "Type of Travel",
-            ["Business travel","Personal Travel"]
-        )
-
-        travel_class = st.selectbox(
-            "Class",
-            ["Business","Eco","Eco Plus"]
-        )
-
-        flight_distance = st.number_input(
-            "Flight Distance",
-            50,
-            7000,
-            1500
-        )
-
-        departure_delay = st.number_input(
-            "Departure Delay",
-            0,
-            2000,
-            0
-        )
-
-    with col2:
-
-        arrival_delay = st.number_input(
-            "Arrival Delay",
-            0,
-            2000,
-            0
-        )
-
-        seat_comfort = st.slider(
-            "Seat Comfort",
-            0,
-            5,
-            4
-        )
-
-        departure_arrival = st.slider(
-            "Departure / Arrival Time",
-            0,
-            5,
-            4
-        )
-
-        food_drink = st.slider(
-            "Food and Drink",
-            0,
-            5,
-            4
-        )
-
-        gate_location = st.slider(
-            "Gate Location",
-            0,
-            5,
-            4
-        )
-
-        inflight_wifi = st.slider(
-            "Inflight Wifi",
-            0,
-            5,
-            4
-        )
-
-        st.subheader("⭐ Penilaian Pelayanan")
-
-    col3,col4 = st.columns(2)
-
-    with col3:
-
-        inflight_entertainment = st.slider(
-            "Inflight Entertainment",
-            0,
-            5,
-            4
-        )
-
-        online_support = st.slider(
-            "Online Support",
-            0,
-            5,
-            4
-        )
-
-        online_booking = st.slider(
-            "Online Booking",
-            0,
-            5,
-            4
-        )
-
-        onboard_service = st.slider(
-            "On-board Service",
-            0,
-            5,
-            4
-        )
-
-        leg_room = st.slider(
-            "Leg Room",
-            0,
-            5,
-            4
-        )
-
-    with col4:
-
-        baggage = st.slider(
-            "Baggage Handling",
-            1,
-            5,
-            4
-        )
-
-        checkin = st.slider(
-            "Check-in Service",
-            0,
-            5,
-            4
-        )
-
-        cleanliness = st.slider(
-            "Cleanliness",
-            0,
-            5,
-            4
-        )
-
-        online_boarding = st.slider(
-            "Online Boarding",
-            0,
-            5,
-            4
-        )
-
-        st.divider()
-
-    predict = st.button(
-        "🚀 Prediksi",
-        use_container_width=True
-    )
-
-
-
-# ==========================================================
-# PREDIKSI
-# ==========================================================
-
-if predict:
-
-    # ------------------------------------------
-    # Encoding data kategorikal
-    # ------------------------------------------
-
-    customer_type_encode = encoders["Customer Type"].transform(
-        [customer_type]
-    )[0]
-
-    travel_type_encode = encoders["Type of Travel"].transform(
-        [travel_type]
-    )[0]
-
-    travel_class_encode = encoders["Class"].transform(
-        [travel_class]
-    )[0]
-
-    # ------------------------------------------
-    # Membuat DataFrame
-    # ------------------------------------------
-
-    input_df = pd.DataFrame({
-
-        "Customer Type":[customer_type_encode],
-        "Age":[age],
-        "Type of Travel":[travel_type_encode],
-        "Class":[travel_class_encode],
-        "Flight Distance":[flight_distance],
-        "Seat comfort":[seat_comfort],
-        "Departure/Arrival time convenient":[departure_arrival],
-        "Food and drink":[food_drink],
-        "Gate location":[gate_location],
-        "Inflight wifi service":[inflight_wifi],
-        "Inflight entertainment":[inflight_entertainment],
-        "Online support":[online_support],
-        "Ease of Online booking":[online_booking],
-        "On-board service":[onboard_service],
-        "Leg room service":[leg_room],
-        "Baggage handling":[baggage],
-        "Checkin service":[checkin],
-        "Cleanliness":[cleanliness],
-        "Online boarding":[online_boarding],
-        "Departure Delay in Minutes":[departure_delay],
-        "Arrival Delay in Minutes":[arrival_delay]
-
-    })
-
-    # ------------------------------------------
-    # Logistic Regression
-    # ------------------------------------------
-
-    input_scaled = scaler.transform(input_df)
-
-    lr_predict = logistic_model.predict(input_scaled)[0]
-
-    lr_probability = logistic_model.predict_proba(
-        input_scaled
-    )[0].max()
-
-
-    # ------------------------------------------
-    # Decision Tree
-    # ------------------------------------------
-
-    dt_predict = decision_tree_model.predict(input_df)[0]
-
-    dt_probability = decision_tree_model.predict_proba(
-        input_df
-    )[0].max()
-
-    
-    # ------------------------------------------
-    # Random Forest
-    # ------------------------------------------
-
-    rf_predict = random_forest_model.predict(input_df)[0]
-
-    rf_probability = random_forest_model.predict_proba(
-        input_df
-    )[0].max()
-
-
-    # ------------------------------------------
-    # XGBoost
-    # ------------------------------------------
-
-    xgb_predict = xgboost_model.predict(input_df)[0]
-
-    xgb_probability = xgboost_model.predict_proba(
-        input_df
-    )[0].max()
-
-
-# ==========================================================
-# DASHBOARD HASIL
-# ==========================================================
-
-with right:
-
-    st.subheader("📊 Hasil Prediksi")
+with col_result:
 
     if predict:
-        
-        st.subheader("📋 Ringkasan Input")
 
-        summary = pd.DataFrame({
+        # encode
+        ct_enc = encoders["Customer Type"].transform([customer_type])[0]
+        tt_enc = encoders["Type of Travel"].transform([travel_type])[0]
+        tc_enc = encoders["Class"].transform([travel_class])[0]
 
-            "Parameter":[
-                "Customer Type",
-                "Age",
-                "Type of Travel",
-                "Class",
-                "Flight Distance"
-            ],
-
-            "Value":[
-                customer_type,
-                age,
-                travel_type,
-                travel_class,
-                flight_distance
-            ]
-
+        input_df = pd.DataFrame({
+            "Customer Type": [ct_enc], "Age": [age],
+            "Type of Travel": [tt_enc], "Class": [tc_enc],
+            "Flight Distance": [flight_distance],
+            "Seat comfort": [seat_comfort],
+            "Departure/Arrival time convenient": [departure_arrival],
+            "Food and drink": [food_drink],
+            "Gate location": [gate_location],
+            "Inflight wifi service": [inflight_wifi],
+            "Inflight entertainment": [inflight_entertainment],
+            "Online support": [online_support],
+            "Ease of Online booking": [online_booking],
+            "On-board service": [onboard_service],
+            "Leg room service": [leg_room],
+            "Baggage handling": [baggage],
+            "Checkin service": [checkin],
+            "Cleanliness": [cleanliness],
+            "Online boarding": [online_boarding],
+            "Departure Delay in Minutes": [departure_delay],
+            "Arrival Delay in Minutes": [arrival_delay]
         })
 
-        st.dataframe(
-            summary,
-            use_container_width=True,
-            hide_index=True
-        )
+        input_scaled = scaler.transform(input_df)
 
+        # prediksi semua model
+        preds = {}
+        for name, mdl, data in [
+            ("Logistic Regression", lr_model, input_scaled),
+            ("Decision Tree", dt_model, input_df),
+            ("Random Forest", rf_model, input_df),
+            ("XGBoost", xgb_model, input_df),
+        ]:
+            p = mdl.predict(data)[0]
+            prob = mdl.predict_proba(data)[0].max()
+            preds[name] = (p, prob)
+
+        # hasil utama
+        best_pred, best_prob = preds["XGBoost"]
+        label = "Satisfied" if best_pred == 1 else "Dissatisfied"
+
+        st.subheader("Hasil Prediksi")
+
+        if best_pred == 1:
+            st.success(f"**{label}** — confidence {best_prob*100:.1f}%")
+        else:
+            st.error(f"**{label}** — confidence {best_prob*100:.1f}%")
+
+        st.caption("Berdasarkan model XGBoost (akurasi tertinggi)")
+
+        # tabel semua model
         st.divider()
-        col1, col2 = st.columns(2)
+        st.subheader("Perbandingan Model")
 
-        with col1:
+        tabel = []
+        for name, (p, prob) in preds.items():
+            tabel.append({
+                "Model": name,
+                "Prediksi": "Satisfied" if p == 1 else "Dissatisfied",
+                "Confidence": f"{prob*100:.1f}%"
+            })
 
-            st.success("🤖 Logistic Regression")
+        st.dataframe(pd.DataFrame(tabel), width="stretch", hide_index=True)
 
-            st.metric(
-                "Prediction",
-                prediction_label(lr_predict),
-                f"{lr_probability*100:.2f}%"
-            )
-
-            st.progress(float(lr_probability))
-
-            st.markdown("---")
-
-            st.success("🌳 Decision Tree")
-
-            st.metric(
-                "Prediction",
-                prediction_label(dt_predict),
-                f"{dt_probability*100:.2f}%"
-            )
-
-            st.progress(float(dt_probability))
-
-        with col2:
-
-            st.success("🌲 Random Forest")
-
-            st.metric(
-                "Prediction",
-                prediction_label(rf_predict),
-                f"{rf_probability*100:.2f}%"
-            )
-
-            st.progress(float(rf_probability))
-
-            st.markdown("---")
-
-            st.success("🏆 XGBoost")
-
-            st.metric(
-                "Prediction",
-                prediction_label(xgb_predict),
-                f"{xgb_probability*100:.2f}%"
-            )
-
-            st.progress(float(xgb_probability))
-
+        # grafik performa
         st.divider()
+        st.subheader("Performa Training")
 
-        st.info("""
-        🏆 **Model Terbaik**
-
-        XGBoost dipilih sebagai model terbaik karena memiliki:
-
-        - Accuracy : **95.80%**
-        - Precision : **97.03%**
-        - Recall : **95.25%**
-        - F1 Score : **96.13%**
-        """)
-
-        st.subheader("📈 Performa Model")
-
-        performance = pd.DataFrame({
-
-            "Model":[
-                "Logistic Regression",
-                "Decision Tree",
-                "Random Forest",
-                "XGBoost"
-            ],
-
-            "Accuracy":[82.89,93.23,95.58,95.80],
-            "Precision":[84.45,93.77,96.89,97.03],
-            "Recall":[84.25,93.86,94.97,95.25],
-            "F1 Score":[84.35,93.82,95.92,96.13]
-
+        perf = pd.DataFrame({
+            "Model": ["Logistic Reg.", "Decision Tree", "Random Forest", "XGBoost"],
+            "Accuracy": [82.89, 93.23, 95.58, 95.80],
+            "Precision": [84.45, 93.77, 96.89, 97.03],
+            "Recall": [84.25, 93.86, 94.97, 95.25],
+            "F1 Score": [84.35, 93.82, 95.92, 96.13]
         })
 
-        st.dataframe(
-            performance,
-            use_container_width=True,
-            hide_index=True
-        )
-        st.info("""
-        Grafik berikut menunjukkan perbandingan performa
-        keempat algoritma Machine Learning berdasarkan
-        hasil evaluasi model.
-        """)
+        fig = go.Figure()
+        for metric, color in [("Accuracy", "#636efa"), ("Precision", "#ab63fa"),
+                              ("Recall", "#00cc96"), ("F1 Score", "#ffa15a")]:
+            fig.add_trace(go.Bar(name=metric, x=perf["Model"], y=perf[metric], marker_color=color))
 
-        st.subheader("📊 Grafik Accuracy")
-        chart_data = performance.set_index("Model")
-        st.bar_chart(
-            chart_data["Accuracy"]
+        fig.update_layout(
+            barmode="group",
+            yaxis=dict(range=[75, 100], ticksuffix="%"),
+            legend=dict(orientation="h", y=1.15, x=0.5, xanchor="center"),
+            margin=dict(l=0, r=0, t=10, b=0),
+            height=300,
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(size=11)
         )
-        st.subheader("📈 Grafik F1 Score")
-        st.bar_chart(
-            chart_data["F1 Score"]
-        )
+
+        st.plotly_chart(fig, width="stretch")
 
     else:
-
-        st.info(
-            "Silakan isi data penumpang kemudian tekan tombol Prediksi."
-        )
+        st.info("Isi data penumpang di sebelah kiri, lalu tekan **Prediksi**.")
